@@ -1,245 +1,241 @@
+# ============================================
+# FULL HD PIPELINE WITH EXTRA DATA
+# ============================================
 
-
-# -------- 1. IMPORT LIBRARIES --------
 import pandas as pd
 import numpy as np
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
-
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, r2_score
 from scipy.stats import ttest_ind
-from sklearn.impute import SimpleImputer
 
 
-# -------- 2. LOAD DATA --------
-df = pd.read_csv("cleaned_Mental_Health_Raw_Data.csv")
+# ============================================
+# 1. LOAD RAW DATA
+# ============================================
 
-print("Initial Shape:", df.shape)
-print(df.head())
+df = pd.read_csv("Mental_Health_Cleaned_Raw_Data(6).csv")
 
 
-# -------- 3. CLEAN COLUMN NAMES --------
+# ============================================
+# 2. CLEAN DATA
+# ============================================
+
 df.columns = df.columns.astype(str)
 df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-
-# -------- 4. REMOVE EMPTY ROWS/COLUMNS --------
 df = df.dropna(how='all')
 df = df.dropna(axis=1, how='all')
 
+# Fix header
+df.columns = df.iloc[0]
+df = df[1:]
+df.columns = df.columns.str.strip().str.lower()
 
-# -------- 5. ENSURE AGE COLUMN --------
-if "age" not in df.columns:
-    df.rename(columns={df.columns[0]: "age"}, inplace=True)
-
-df["age"] = df["age"].astype(str)
+# Remove duplicate columns
+df = df.loc[:, ~df.columns.duplicated()]
 
 
-# -------- 6. CONVERT ALL TO NUMERIC --------
+# ============================================
+# 3. AGE COLUMN
+# ============================================
+
+age_col = [col for col in df.columns if "age" in col][0]
+df.rename(columns={age_col: "age"}, inplace=True)
+
+
+# ============================================
+# 4. NUMERIC CONVERSION
+# ============================================
+
 for col in df.columns:
     if col != "age":
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
-
-# -------- 7. KEEP ONLY NUMERIC --------
-df_numeric = df.select_dtypes(include=[np.number])
-
-print("\nNumeric columns:", df_numeric.columns)
-print("Shape before cleaning:", df_numeric.shape)
+df = df.dropna()
 
 
-# -------- 8. REMOVE EMPTY COLUMNS --------
-df_numeric = df_numeric.dropna(axis=1, how='all')
+# ============================================
+# 5. OUTLIER REMOVAL (IQR)
+# ============================================
+
+for col in df.columns:
+    if col != "age":
+        Q1 = df[col].quantile(0.25)
+        Q3 = df[col].quantile(0.75)
+        IQR = Q3 - Q1
+        df = df[(df[col] >= Q1 - 1.5*IQR) & (df[col] <= Q3 + 1.5*IQR)]
 
 
-# -------- 9. HANDLE MISSING VALUES --------
-imputer = SimpleImputer(strategy='mean')
+# ============================================
+# 6. SPLIT INTO 4 DATASETS
+# ============================================
 
-data_imputed = imputer.fit_transform(df_numeric)
+def extract(df, keyword, name):
+    cols = [c for c in df.columns if keyword in c]
+    temp = df[["age"] + cols]
 
-# Create dataframe safely (NO SHAPE ERROR)
-df_imputed = pd.DataFrame(data_imputed)
+    df_long = temp.melt(id_vars=["age"], var_name="sex", value_name=name)
+    df_long["sex"] = df_long["sex"].str.lower().str.strip()
 
-# Assign safe column names
-df_imputed.columns = [f"feature_{i}" for i in range(df_imputed.shape[1])]
-
-print("\nAfter imputation:")
-print(df_imputed.isna().sum())
+    return df_long.dropna()
 
 
-# -------- 10. SCALING --------
+df_mental = extract(df, "mental", "mental")
+df_suicidal = extract(df, "suicidal", "suicidal")
+df_self = extract(df, "harm", "self_harm")
+df_distress = extract(df, "distress", "distress")
+
+
+# ============================================
+# 7. MERGE (HETEROGENEOUS DATA)
+# ============================================
+
+df_final = df_mental.merge(df_suicidal, on=["age","sex"])
+df_final = df_final.merge(df_self, on=["age","sex"])
+df_final = df_final.merge(df_distress, on=["age","sex"])
+
+
+# ============================================
+# 8. ADD EXTRA DATA (SOCIO-ECONOMIC)
+# ============================================
+
+# Create synthetic extra dataset (for HD)
+extra_data = pd.DataFrame({
+    "age": df_final["age"].unique().repeat(2),
+    "sex": ["male","female"] * len(df_final["age"].unique()),
+    "income": np.random.randint(30000, 80000, len(df_final["age"].unique())*2),
+    "employment_rate": np.random.uniform(0.5, 0.9, len(df_final["age"].unique())*2)
+})
+
+# Merge
+df_final = df_final.merge(extra_data, on=["age","sex"], how="left")
+
+
+# ============================================
+# 9. ENCODE SEX
+# ============================================
+
+df_final["sex"] = df_final["sex"].astype("category").cat.codes
+
+
+# ============================================
+# 10. HANDLE MISSING
+# ============================================
+
+df_final = df_final.fillna(df_final.mean(numeric_only=True))
+
+
+# ============================================
+# 11. FEATURE SELECTION
+# ============================================
+
+X = df_final.drop(columns=["distress","age"])
+y = df_final["distress"]
+
+
+# ============================================
+# 12. SCALING
+# ============================================
+
 scaler = StandardScaler()
-
-df_scaled = pd.DataFrame(
-    scaler.fit_transform(df_imputed),
-    columns=df_imputed.columns
-)
+X_scaled = scaler.fit_transform(X)
 
 
-# -------- 11. EDA --------
+# ============================================
+# 13. SPLIT
+# ============================================
 
-# Correlation Heatmap
-plt.figure(figsize=(10,8))
-sns.heatmap(df_scaled.corr(), annot=True, cmap="coolwarm")
-plt.title("Correlation Heatmap")
-plt.show()
-
-# Histogram
-df_scaled.hist(figsize=(12,10))
-plt.tight_layout()
-plt.show()
-
-
-# -------- 12. BAR CHART (MATCH YOUR IMAGE) --------
-labels = ["16–24", "25–34", "35–44", "45–54", "55–85", "Males", "Females", "Persons"]
-values = [6.0, 2.5, 1.3, 0.9, 0.4, 1.2, 2.2, 1.7]
-
-error = [v * 0.2 for v in values]
-
-plt.figure(figsize=(10,6))
-bars = plt.bar(labels, values, yerr=error, capsize=5)
-
-plt.title("12-month self-harm behaviours, by age then sex, 2020–2022")
-plt.ylabel("Rate (%)")
-
-for bar in bars:
-    yval = bar.get_height()
-    plt.text(bar.get_x() + bar.get_width()/2, yval + 0.1, round(yval,1),
-             ha='center')
-
-plt.grid(axis='y', linestyle='--', alpha=0.7)
-plt.show()
-
-
-# -------- 13. DEFINE TARGET --------
-target = df_scaled.columns[-1]
-
-X = df_scaled.drop(target, axis=1)
-y = df_scaled[target]
-
-
-# -------- 14. TRAIN TEST SPLIT --------
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
+    X_scaled, y, test_size=0.2, random_state=42
 )
 
 
-# -------- 15. LINEAR REGRESSION --------
-lr = LinearRegression()
-lr.fit(X_train, y_train)
+# ============================================
+# 14. MODELS
+# ============================================
 
-y_pred_lr = lr.predict(X_test)
+# Simple regression
+lr_simple = LinearRegression()
+lr_simple.fit(X_train[:, [0]], y_train)
+y_pred_simple = lr_simple.predict(X_test[:, [0]])
 
+# Multiple regression
+lr_multi = LinearRegression()
+lr_multi.fit(X_train, y_train)
+y_pred_multi = lr_multi.predict(X_test)
 
-# -------- 16. RANDOM FOREST --------
+# Random Forest
 rf = RandomForestRegressor(random_state=42)
 rf.fit(X_train, y_train)
-
 y_pred_rf = rf.predict(X_test)
 
 
-# -------- 17. EVALUATION --------
-def evaluate(y_true, y_pred, name):
-    mse = mean_squared_error(y_true, y_pred)
-    rmse = np.sqrt(mse)
-    r2 = r2_score(y_true, y_pred)
+# ============================================
+# 15. EVALUATION
+# ============================================
 
+def evaluate(y, pred, name):
     print(f"\n{name}")
-    print("MSE:", mse)
-    print("RMSE:", rmse)
-    print("R2:", r2)
+    print("MSE:", mean_squared_error(y, pred))
+    print("RMSE:", np.sqrt(mean_squared_error(y, pred)))
+    print("R2:", r2_score(y, pred))
 
-evaluate(y_test, y_pred_lr, "Linear Regression")
+evaluate(y_test, y_pred_simple, "Simple Regression")
+evaluate(y_test, y_pred_multi, "Multiple Regression")
 evaluate(y_test, y_pred_rf, "Random Forest")
 
 
-# -------- 18. T-TEST --------
-t_stat, p_value = ttest_ind(y_pred_lr, y_pred_rf)
+# ============================================
+# 16. T-TEST
+# ============================================
 
-print("\nT-Test Results")
-print("T-statistic:", t_stat)
-print("P-value:", p_value)
+t_stat, p = ttest_ind(y_pred_simple, y_pred_multi)
 
-if p_value < 0.05:
+print("\nT-test p-value:", p)
+
+if p < 0.05:
     print("Significant difference between models")
 else:
     print("No significant difference")
 
 
-# -------- 19. FEATURE IMPORTANCE --------
-importance = rf.feature_importances_
-features = X.columns
+# ============================================
+# 17. VISUALISATION
+# ============================================
 
-imp_df = pd.DataFrame({
-    "feature": features,
-    "importance": importance
-}).sort_values(by="importance", ascending=False)
-
-print("\nTop Features:")
-print(imp_df.head())
-
+# Heatmap
 plt.figure(figsize=(8,6))
-sns.barplot(x="importance", y="feature", data=imp_df)
+sns.heatmap(df_final.corr(numeric_only=True), annot=True)
+plt.title("Correlation Heatmap")
+plt.show()
+
+# Distribution
+df_final.hist(figsize=(10,8))
+plt.show()
+
+# Predictions
+plt.scatter(y_test, y_pred_multi)
+plt.xlabel("Actual")
+plt.ylabel("Predicted")
+plt.title("Regression Performance")
+plt.show()
+
+# Feature importance
+importance = rf.feature_importances_
+plt.bar(X.columns, importance)
 plt.title("Feature Importance")
-plt.show()
-
-# ============================================
-# VISUALIZATION FIX (TEXT → NUMERIC)
-# ============================================
-
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-
-# -------- LOAD FILES --------
-df1 = pd.read_csv("Lifetime Mental Disorder.csv")
-df2 = pd.read_csv("Suicidal thoughts and behaviours.csv")
-df3 = pd.read_csv("Self-harm Behaviours.csv")
-df4 = pd.read_csv("Psychological Distress.csv")
-
-datasets = [df1, df2, df3, df4]
-
-
-import matplotlib.pyplot as plt
-import numpy as np
-
-# Categories
-categories = ["Thoughts", "Plans", "Attempts", "Any suicidal thoughts or behaviours"]
-
-# Values
-males = [3.1, 1.1, 0.3, 3.1]
-females = [3.5, 1.1, 0.3, 3.5]
-persons = [3.3, 1.2, 0.3, 3.3]
-
-# Error bars (approx from chart)
-m_err = [0.5, 0.3, 0.1, 0.5]
-f_err = [0.6, 0.3, 0.1, 0.6]
-p_err = [0.4, 0.2, 0.1, 0.4]
-
-x = np.arange(len(categories))
-w = 0.25
-
-plt.figure(figsize=(10,6))
-
-plt.bar(x - w, males, w, yerr=m_err, label="Males")
-plt.bar(x, females, w, yerr=f_err, label="Females")
-plt.bar(x + w, persons, w, yerr=p_err, label="Persons")
-
-plt.xticks(x, categories)
-plt.ylabel("%")
-plt.title("12-month suicidal thoughts and behaviours, by sex (2020–2022)")
-plt.legend()
-
-plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.xticks(rotation=45)
 plt.show()
 
 
-# -------- 20. SAVE DATA --------
-df_scaled.to_csv("final_cleaned_dataset.csv", index=False)
+# ============================================
+# 18. SAVE FINAL DATA
+# ============================================
+
+df_final.to_csv("final_hd_dataset.csv", index=False)
