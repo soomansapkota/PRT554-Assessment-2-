@@ -189,6 +189,101 @@ sns.barplot(x="importance", y="feature", data=imp_df)
 plt.title("Feature Importance")
 plt.show()
 
+# ============================================
+# VISUALIZATION FIX (TEXT → NUMERIC)
+# ============================================
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# -------- LOAD FILES --------
+df1 = pd.read_csv("Lifetime Mental Disorder.csv")
+df2 = pd.read_csv("Suicidal thoughts and behaviours.csv")
+df3 = pd.read_csv("Self-harm Behaviours.csv")
+df4 = pd.read_csv("Psychological Distress.csv")
+
+datasets = [df1, df2, df3, df4]
+
+
+# ============================================
+# 🔧 CONVERT TEXT TO NUMERIC (KEY FIX)
+# ============================================
+
+def convert_numeric(df):
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    return df
+
+
+datasets = [convert_numeric(df) for df in datasets]
+
+
+# ============================================
+# 📊 1. HEATMAP
+# ============================================
+
+for i, df in enumerate(datasets, start=1):
+    numeric_df = df.dropna(axis=1, how='all')
+    
+    if numeric_df.shape[1] > 0:
+        plt.figure(figsize=(8,6))
+        sns.heatmap(numeric_df.corr(), annot=True)
+        plt.title(f"Dataset {i} Heatmap")
+        plt.show()
+    else:
+        print(f"Dataset {i}: No usable data")
+
+
+# ============================================
+# 📊 2. HISTOGRAM
+# ============================================
+
+for i, df in enumerate(datasets, start=1):
+    numeric_df = df.dropna(axis=1, how='all')
+    
+    if numeric_df.shape[1] > 0:
+        numeric_df.hist(figsize=(10,8))
+        plt.suptitle(f"Dataset {i} Distribution")
+        plt.show()
+    else:
+        print(f"Dataset {i}: No usable data")
+
+
+# ============================================
+# 📊 3. BAR CHART
+# ============================================
+
+for i, df in enumerate(datasets, start=1):
+    numeric_df = df.dropna(axis=1, how='all')
+    
+    if numeric_df.shape[1] > 0:
+        col = numeric_df.columns[0]
+        
+        plt.figure(figsize=(8,5))
+        plt.bar(range(len(numeric_df[col])), numeric_df[col])
+        plt.title(f"Dataset {i} - {col}")
+        plt.show()
+    else:
+        print(f"Dataset {i}: No usable column")
+
+
+# ============================================
+# 📊 4. SCATTER PLOT
+# ============================================
+
+for i, df in enumerate(datasets, start=1):
+    numeric_df = df.dropna(axis=1, how='all')
+    
+    if numeric_df.shape[1] >= 2:
+        plt.figure(figsize=(6,4))
+        plt.scatter(numeric_df.iloc[:,0], numeric_df.iloc[:,1])
+        plt.title(f"Dataset {i} Scatter")
+        plt.show()
+    else:
+        print(f"Dataset {i}: Not enough data")
+
 
 # -------- 20. SAVE DATA --------
 df_scaled.to_csv("final_cleaned_dataset.csv", index=False)
