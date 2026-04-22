@@ -207,82 +207,38 @@ df4 = pd.read_csv("Psychological Distress.csv")
 datasets = [df1, df2, df3, df4]
 
 
-# ============================================
-# 🔧 CONVERT TEXT TO NUMERIC (KEY FIX)
-# ============================================
+import matplotlib.pyplot as plt
+import numpy as np
 
-def convert_numeric(df):
-    for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-    return df
+# Categories
+categories = ["Thoughts", "Plans", "Attempts", "Any suicidal thoughts or behaviours"]
 
+# Values
+males = [3.1, 1.1, 0.3, 3.1]
+females = [3.5, 1.1, 0.3, 3.5]
+persons = [3.3, 1.2, 0.3, 3.3]
 
-datasets = [convert_numeric(df) for df in datasets]
+# Error bars (approx from chart)
+m_err = [0.5, 0.3, 0.1, 0.5]
+f_err = [0.6, 0.3, 0.1, 0.6]
+p_err = [0.4, 0.2, 0.1, 0.4]
 
+x = np.arange(len(categories))
+w = 0.25
 
-# ============================================
-# 📊 1. HEATMAP
-# ============================================
+plt.figure(figsize=(10,6))
 
-for i, df in enumerate(datasets, start=1):
-    numeric_df = df.dropna(axis=1, how='all')
-    
-    if numeric_df.shape[1] > 0:
-        plt.figure(figsize=(8,6))
-        sns.heatmap(numeric_df.corr(), annot=True)
-        plt.title(f"Dataset {i} Heatmap")
-        plt.show()
-    else:
-        print(f"Dataset {i}: No usable data")
+plt.bar(x - w, males, w, yerr=m_err, label="Males")
+plt.bar(x, females, w, yerr=f_err, label="Females")
+plt.bar(x + w, persons, w, yerr=p_err, label="Persons")
 
+plt.xticks(x, categories)
+plt.ylabel("%")
+plt.title("12-month suicidal thoughts and behaviours, by sex (2020–2022)")
+plt.legend()
 
-# ============================================
-# 📊 2. HISTOGRAM
-# ============================================
-
-for i, df in enumerate(datasets, start=1):
-    numeric_df = df.dropna(axis=1, how='all')
-    
-    if numeric_df.shape[1] > 0:
-        numeric_df.hist(figsize=(10,8))
-        plt.suptitle(f"Dataset {i} Distribution")
-        plt.show()
-    else:
-        print(f"Dataset {i}: No usable data")
-
-
-# ============================================
-# 📊 3. BAR CHART
-# ============================================
-
-for i, df in enumerate(datasets, start=1):
-    numeric_df = df.dropna(axis=1, how='all')
-    
-    if numeric_df.shape[1] > 0:
-        col = numeric_df.columns[0]
-        
-        plt.figure(figsize=(8,5))
-        plt.bar(range(len(numeric_df[col])), numeric_df[col])
-        plt.title(f"Dataset {i} - {col}")
-        plt.show()
-    else:
-        print(f"Dataset {i}: No usable column")
-
-
-# ============================================
-# 📊 4. SCATTER PLOT
-# ============================================
-
-for i, df in enumerate(datasets, start=1):
-    numeric_df = df.dropna(axis=1, how='all')
-    
-    if numeric_df.shape[1] >= 2:
-        plt.figure(figsize=(6,4))
-        plt.scatter(numeric_df.iloc[:,0], numeric_df.iloc[:,1])
-        plt.title(f"Dataset {i} Scatter")
-        plt.show()
-    else:
-        print(f"Dataset {i}: Not enough data")
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.show()
 
 
 # -------- 20. SAVE DATA --------
