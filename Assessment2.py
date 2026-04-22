@@ -1,7 +1,4 @@
-# ============================================
-# FINAL MENTAL HEALTH ANALYSIS PIPELINE
-# (ULTIMATE FIXED VERSION)
-# ============================================
+
 
 # -------- 1. IMPORT LIBRARIES --------
 import pandas as pd
