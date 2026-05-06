@@ -1,6 +1,4 @@
-# ============================================
-# FULL HD PIPELINE WITH EXTRA DATA
-# ============================================
+
 
 import pandas as pd
 import numpy as np
